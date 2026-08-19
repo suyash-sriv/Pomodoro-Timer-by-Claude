@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C1E23">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Pomodoro sequence timer</title>
+<style>
+  :root{
+    --ink:        #0C1E23;
+    --ink-raised: #122B31;
+    --rule:       rgba(237,230,217,.14);
+    --paper:      #EDE6D9;
+    --muted:      #8AA0A4;
+    --focus:      #E9A038;
+    --break:      #74C7A8;
+    --long:       #A99BEA;
+    --accent:     var(--focus);
+    --tape-h:     58px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ink);
+    background-image:radial-gradient(120% 80% at 50% -10%, #16343B 0%, var(--ink) 60%);
+    color:var(--paper);
+    font-family:'Roboto Condensed',Roboto,system-ui,-apple-system,sans-serif;
+    min-height:100vh;
+    padding:calc(28px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom));
+    display:flex;justify-content:center;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{width:100%;max-width:860px}
+
+  /* ---------- header ---------- */
+  .top{
+    display:flex;align-items:baseline;justify-content:space-between;
+    gap:16px;padding-bottom:14px;border-bottom:1px solid var(--rule);
+  }
+  .wordmark{
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-weight:500;font-size:13px;letter-spacing:.22em;text-transform:uppercase;
+  }
+  .wordmark span{color:var(--accent);transition:color .5s}
+  .clockface{
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:12px;letter-spacing:.12em;color:var(--muted);
+  }
+
+  /* ---------- sequence input ---------- */
+  .composer{margin-top:26px}
+  .eyebrow{
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:9px;
+  }
+  .field{
+    display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;
+  }
+  input[type=text]{
+    flex:1 1 320px;min-width:0;
+    background:var(--ink-raised);
+    border:1px solid var(--rule);
+    border-radius:2px;
+    color:var(--paper);
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:20px;font-weight:300;letter-spacing:.06em;
+    padding:14px 16px;
+  }
+  input[type=text]::placeholder{color:#4F696E}
+  input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+
+  button{
+    font-family:Roboto,system-ui,sans-serif;font-size:14px;font-weight:500;
+    letter-spacing:.02em;
+    background:transparent;color:var(--paper);
+    border:1px solid var(--rule);border-radius:2px;
+    padding:14px 20px;cursor:pointer;
+    transition:background .18s,border-color .18s,color .18s,opacity .18s;
+  }
+  button:hover:not(:disabled){background:rgba(237,230,217,.07);border-color:rgba(237,230,217,.34)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button:disabled{opacity:.32;cursor:not-allowed}
+  .btn-apply{border-color:rgba(237,230,217,.34)}
+  .btn-apply[data-dirty="1"]{background:var(--accent);color:#0C1E23;border-color:var(--accent);font-weight:700}
+
+  .readout{
+    margin-top:11px;min-height:20px;
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:12.5px;letter-spacing:.04em;color:var(--muted);
+  }
+  .readout b{color:var(--paper);font-weight:400}
+  .readout.warn{color:var(--focus)}
+
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .presets button{
+    padding:7px 12px;font-size:12px;
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;letter-spacing:.04em;
+    color:var(--muted);
+  }
+  .presets button:hover{color:var(--paper)}
+
+  #library{margin-top:8px;align-items:center}
+  .addbtn{color:var(--muted);border-style:dashed}
+  .addbtn:hover{color:var(--accent);border-color:var(--accent)}
+  .chip{
+    display:inline-flex;align-items:stretch;
+    border:1px solid var(--rule);border-radius:2px;overflow:hidden;
+  }
+  .chip.active{border-color:var(--accent)}
+  .chip button{border:0;border-radius:0}
+  .chip-load{
+    padding:7px 10px;font-size:12px;color:var(--paper);
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;letter-spacing:.04em;
+  }
+  .chip.active .chip-load{color:var(--accent)}
+  .chip-del{
+    padding:7px 9px;font-size:13px;line-height:1;color:#5E777B;
+    border-left:1px solid var(--rule) !important;
+  }
+  .chip-del:hover{color:var(--paper);background:rgba(237,230,217,.12)}
+
+  /* ---------- stage ---------- */
+  .stage{
+    margin-top:42px;text-align:center;
+  }
+  .phase{
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:12px;letter-spacing:.26em;text-transform:uppercase;
+    color:var(--accent);transition:color .5s;
+    min-height:16px;
+  }
+  .count{
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-weight:200;
+    font-size:clamp(4.6rem,20vw,11.5rem);
+    line-height:.94;letter-spacing:-.03em;
+    margin:14px 0 4px;
+    font-variant-numeric:tabular-nums;
+    transition:opacity .2s;
+  }
+  .count.paused{opacity:.42}
+  .subcount{
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:12.5px;letter-spacing:.1em;color:var(--muted);
+    min-height:18px;
+  }
+  .controls{
+    display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px;
+  }
+  .btn-primary{
+    background:var(--accent);color:#0C1E23;border-color:var(--accent);
+    font-weight:700;min-width:150px;letter-spacing:.04em;
+    transition:background .5s,border-color .5s;
+  }
+  .btn-primary:hover:not(:disabled){background:var(--paper);border-color:var(--paper)}
+
+  /* ---------- the tape ---------- */
+  .tapewrap{margin-top:46px}
+  .tapehead{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:10px;
+  }
+  .tape{
+    position:relative;display:flex;gap:3px;height:var(--tape-h);
+    width:100%;
+  }
+  .seg{
+    position:relative;overflow:hidden;cursor:pointer;
+    padding:0;min-width:0;border-radius:0;
+    border:0;border-top:2px solid var(--c);
+    background:rgba(237,230,217,.05);
+    transition:background .18s;
+  }
+  .seg:hover{background:rgba(237,230,217,.11)}
+  .seg:focus-visible{outline:2px solid var(--paper);outline-offset:2px}
+  .seg .fill{
+    position:absolute;inset:0 auto 0 0;width:0%;
+    background:var(--c);opacity:.85;
+  }
+  .seg.done .fill{opacity:.42}
+  .seg .tag{
+    position:absolute;left:7px;bottom:6px;
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:11px;letter-spacing:.06em;color:var(--paper);
+    mix-blend-mode:difference;pointer-events:none;white-space:nowrap;
+  }
+  .seg.now{background:rgba(237,230,217,.12)}
+  .seg.now::after{
+    content:"";position:absolute;inset:0;border:1px solid var(--c);border-top:0;
+    pointer-events:none;
+  }
+  .playhead{
+    position:absolute;top:-8px;bottom:-8px;width:1px;
+    background:var(--paper);pointer-events:none;
+    transform:translateX(-.5px);
+  }
+  .playhead::before{
+    content:"";position:absolute;top:-3px;left:-3px;
+    width:7px;height:7px;border-radius:50%;background:var(--paper);
+  }
+  .tapefoot{
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    margin-top:16px;
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:12px;letter-spacing:.06em;color:var(--muted);
+  }
+  .tapefoot b{color:var(--paper);font-weight:400}
+
+  /* ---------- footer ---------- */
+  .foot{
+    margin-top:40px;padding-top:16px;border-top:1px solid var(--rule);
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    font-family:'Roboto Mono','DejaVu Sans Mono',ui-monospace,monospace;
+    font-size:11px;letter-spacing:.08em;color:#5E777B;
+  }
+  .foot kbd{
+    font-family:inherit;color:var(--muted);
+    border:1px solid var(--rule);border-radius:2px;padding:1px 5px;
+  }
+  .linkbtn{
+    background:none;border:0;padding:0;color:#5E777B;
+    font-family:inherit;font-size:11px;letter-spacing:.08em;cursor:pointer;
+  }
+  .linkbtn:hover{color:var(--paper);background:none}
+  .linkbtn[aria-pressed="true"]{color:var(--accent)}
+
+  @media (max-width:560px){
+    body{padding:20px 16px 32px}
+    :root{--tape-h:46px}
+    .stage{margin-top:30px}
+    .tapewrap{margin-top:34px}
+    input[type=text]{font-size:17px;padding:12px 13px}
+    .btn-primary{flex:1 1 100%}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="top">
+    <div class="wordmark">Pomodoro <span>sequence</span></div>
+    <div class="clockface" id="wallclock"></div>
+  </header>
+
+  <section class="composer">
+    <div class="eyebrow"><label for="seqInput">Your sequence, in minutes</label></div>
+    <div class="field">
+      <input id="seqInput" type="text" inputmode="text" autocomplete="off" spellcheck="false"
+             value="25 + 5 + 25 + 15" placeholder="25 + 5 + 25 + 15">
+      <button id="applyBtn" class="btn-apply" data-dirty="0">Apply</button>
+    </div>
+    <div class="readout" id="readout"></div>
+    <div class="presets" aria-label="Preset sequences">
+      <button data-seq="25 + 5 + 25 + 15">25 + 5 + 25 + 15</button>
+      <button data-seq="4x(25 + 5)">4×(25 + 5)</button>
+      <button data-seq="50 + 10 + 50 + 10">50 + 10 + 50 + 10</button>
+      <button data-seq="90 + 20">90 + 20</button>
+      <button data-seq="45 + 15 + 45 + 15 + 45 + 30">45 + 15 · long day</button>
+    </div>
+    <div class="presets" id="library" aria-label="Saved sequences"></div>
+  </section>
+
+  <section class="stage">
+    <div class="phase" id="phase" aria-live="polite">Focus 1 of 2</div>
+    <div class="count" id="count">25:00</div>
+    <div class="subcount" id="subcount"></div>
+    <div class="controls">
+      <button id="startBtn" class="btn-primary">Start</button>
+      <button id="skipBtn">Skip ahead</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </section>
+
+  <section class="tapewrap">
+    <div class="tapehead">
+      <span>Session tape</span>
+      <span id="tapeCount"></span>
+    </div>
+    <div class="tape" id="tape"></div>
+    <div class="tapefoot">
+      <span>Elapsed <b id="elapsedOut">0:00</b> of <b id="totalOut">70:00</b></span>
+      <span id="endsOut"></span>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span><kbd>Space</kbd> start or pause &nbsp; <kbd>N</kbd> next &nbsp; <kbd>R</kbd> reset</span>
+    <span>
+      <button class="linkbtn" id="soundBtn" aria-pressed="true">Sound on</button>
+      &nbsp;·&nbsp;
+      <button class="linkbtn" id="modeBtn" aria-pressed="false">Every block a focus</button>
+      &nbsp;·&nbsp;
+      <span>Keeps running if you close the tab</span>
+    </span>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ------------------------------------------------------------------
+     Elements
+  ------------------------------------------------------------------ */
+  const $ = id => document.getElementById(id);
+  const input     = $('seqInput'),
+        applyBtn  = $('applyBtn'),
+        readout   = $('readout'),
+        phaseEl   = $('phase'),
+        countEl   = $('count'),
+        subEl     = $('subcount'),
+        startBtn  = $('startBtn'),
+        skipBtn   = $('skipBtn'),
+        resetBtn  = $('resetBtn'),
+        tapeEl    = $('tape'),
+        libEl     = $('library'),
+        tapeCount = $('tapeCount'),
+        elapsedOut= $('elapsedOut'),
+        totalOut  = $('totalOut'),
+        endsOut   = $('endsOut'),
+        wallclock = $('wallclock'),
+        soundBtn  = $('soundBtn'),
+        modeBtn   = $('modeBtn'),
+        root      = document.documentElement;
+
+  /* ------------------------------------------------------------------
+     State
+  ------------------------------------------------------------------ */
+  let segs = [];          // [{mins, ms, type, label}]
+  let idx = 0;            // current segment
+  let elapsedInSeg = 0;   // ms into the current segment
+  let running = false;
+  let finished = false;
+  let anchor = Date.now();// epoch ms at which the current block began
+  let catchingUp = false; // true while replaying time missed offline
+  let awayNote = '';      // what happened while the app was closed
+  let ticker = null;
+  let soundOn = true;
+  let alternate = false;  // off: every position is a focus block
+  let wakeLock = null;
+
+  const COLORS = {focus:'var(--focus)', break:'var(--break)', long:'var(--long)'};
+  const MAX_SEGS = 40;
+
+  /* ------------------------------------------------------------------
+     Parsing:  "25 + 5 + 25 + 15",  "4x(25+5)",  "25,5,25,15",  "0.5"
+  ------------------------------------------------------------------ */
+  function parse(str){
+    const out = [];
+    // 3x(25+5) — a repeated group
+    const grouped = /(\d+)\s*[x*×]\s*\(([^)]*)\)/gi;
+    let rest = String(str).replace(grouped, (m, n, inner) => {
+      const times = Math.min(parseInt(n,10) || 0, 20);
+      const nums = inner.match(/\d+(?:\.\d+)?/g) || [];
+      let expanded = [];
+      for(let i=0;i<times;i++) expanded = expanded.concat(nums);
+      return ' ' + expanded.join(' ') + ' ';
+    });
+    // 4x25 — a repeated single value
+    const tokens = rest.match(/\d+(?:\.\d+)?\s*[x*×]\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?/g) || [];
+    tokens.forEach(t => {
+      const mult = t.split(/[x*×]/);
+      if(mult.length === 2){
+        const times = Math.min(parseFloat(mult[0]) | 0, 20);
+        const val = parseFloat(mult[1]);
+        for(let i=0;i<times;i++) out.push(val);
+      } else {
+        out.push(parseFloat(t));
+      }
+    });
+    return out.filter(n => isFinite(n) && n > 0 && n <= 600).slice(0, MAX_SEGS);
+  }
+
+  // Assigns type + label to every block. With alternating off, each position
+  // is a focus block. Durations are untouched, so this is safe mid-session.
+  function classify(list){
+    const last = list.length - 1;
+    const breaks = alternate ? list.filter((_,i) => i % 2 === 1).map(s => s.mins) : [];
+    const shortest = breaks.length ? Math.min.apply(null, breaks) : 0;
+    const focusTotal = alternate ? list.filter((_,i) => i % 2 === 0).length : list.length;
+    let f = 0;
+    list.forEach((s, i) => {
+      const isFocus = !alternate || i % 2 === 0;
+      let type = isFocus ? 'focus' : 'break';
+      if(!isFocus && i === last && s.mins > shortest) type = 'long';
+      if(isFocus) f++;
+      s.type = type;
+      s.label = isFocus ? ('Focus ' + f + ' of ' + focusTotal)
+                        : (type === 'long' ? 'Long break' : 'Break');
+    });
+    return list;
+  }
+
+  function build(mins){
+    return classify(mins.map(m => ({mins: m, ms: Math.round(m * 60000)})));
+  }
+
+  /* ------------------------------------------------------------------
+     Formatting
+  ------------------------------------------------------------------ */
+  function clock(ms){
+    if(ms < 0) ms = 0;
+    const t = Math.ceil(ms / 1000);
+    const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+    const pad = n => (n < 10 ? '0' : '') + n;
+    return h ? h + ':' + pad(m) + ':' + pad(s) : m + ':' + pad(s);
+  }
+  function human(mins){
+    if(mins < 1) return Math.round(mins * 60) + ' sec';
+    if(mins < 60) return round(mins) + ' min';
+    const h = Math.floor(mins / 60), m = round(mins % 60);
+    return h + ' hr' + (m ? ' ' + m + ' min' : '');
+  }
+  function round(n){ return Math.round(n * 100) / 100; }
+  function timeOfDay(d){
+    return d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  }
+
+  const totalMs   = () => segs.reduce((a,s) => a + s.ms, 0);
+  const elapsedMs = () => segs.slice(0, idx).reduce((a,s) => a + s.ms, 0) + elapsedInSeg;
+  const sessionStarted = () => running || finished || idx > 0 || elapsedInSeg > 0;
+
+  /* ------------------------------------------------------------------
+     Sound — short synthesised tones, no files
+  ------------------------------------------------------------------ */
+  let actx = null;
+  function tone(freq, at, dur, gain){
+    if(!actx) return;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, actx.currentTime + at);
+    g.gain.exponentialRampToValueAtTime(gain, actx.currentTime + at + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + at + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(actx.currentTime + at); o.stop(actx.currentTime + at + dur + 0.05);
+  }
+  function primeAudio(){
+    if(!soundOn) return false;
+    try{
+      if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if(actx.state === 'suspended') actx.resume();
+      return true;
+    }catch(e){ return false; }
+  }
+  function chime(kind){
+    if(!primeAudio()) return;
+    if(kind === 'toBreak')      { tone(784,0,.5,.18); tone(523,.16,.7,.16); }
+    else if(kind === 'toFocus') { tone(523,0,.4,.16); tone(784,.15,.6,.18); }
+    else                        { tone(659,0,.6,.18); tone(523,.22,.7,.18); tone(392,.44,1.3,.20); }
+  }
+
+  /* ------------------------------------------------------------------
+     Rendering
+  ------------------------------------------------------------------ */
+  function paintAccent(){
+    const t = segs[idx] ? segs[idx].type : 'focus';
+    root.style.setProperty('--accent', COLORS[t]);
+  }
+
+  function drawTape(){
+    tapeEl.innerHTML = '';
+    segs.forEach((s, i) => {
+      const el = document.createElement('button');
+      el.className = 'seg';
+      el.style.flex = s.ms + ' 1 0';
+      el.style.setProperty('--c', COLORS[s.type]);
+      el.title = s.label + ' · ' + human(s.mins);
+      el.setAttribute('aria-label', 'Jump to ' + s.label + ', ' + human(s.mins));
+      const fill = document.createElement('span'); fill.className = 'fill';
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = round(s.mins);
+      el.appendChild(fill); el.appendChild(tag);
+      el.addEventListener('click', () => jumpTo(i));
+      tapeEl.appendChild(el);
+    });
+    const ph = document.createElement('div');
+    ph.className = 'playhead'; ph.id = 'playhead'; ph.style.display = 'none';
+    tapeEl.appendChild(ph);
+    tapeCount.textContent = segs.length + (segs.length === 1 ? ' timer' : ' timers');
+  }
+
+  function updateTape(){
+    const nodes = tapeEl.querySelectorAll('.seg');
+    nodes.forEach((el, i) => {
+      const pct = i < idx || (finished) ? 100
+                : i === idx ? Math.min(100, elapsedInSeg / segs[i].ms * 100)
+                : 0;
+      el.querySelector('.fill').style.width = pct + '%';
+      el.classList.toggle('done', i < idx || finished);
+      el.classList.toggle('now', i === idx && !finished);
+    });
+    const ph = $('playhead');
+    if(!ph) return;
+    if(!sessionStarted() || !nodes.length){ ph.style.display = 'none'; return; }
+    const cur = nodes[Math.min(idx, nodes.length - 1)];
+    const frac = finished ? 1 : Math.min(1, elapsedInSeg / segs[idx].ms);
+    ph.style.display = 'block';
+    ph.style.left = (cur.offsetLeft + cur.offsetWidth * frac) + 'px';
+  }
+
+  function render(){
+    const s = segs[idx];
+    if(finished || !s){
+      phaseEl.textContent = 'Session complete';
+      countEl.textContent = '0:00';
+      countEl.classList.remove('paused');
+      subEl.textContent = awayNote || (human(totalMs() / 60000) + ' done — nice work');
+      startBtn.textContent = 'Start again';
+      skipBtn.disabled = true;
+    } else {
+      const left = s.ms - elapsedInSeg;
+      phaseEl.textContent = s.label + ' · ' + human(s.mins);
+      countEl.textContent = clock(left);
+      countEl.classList.toggle('paused', !running);
+      subEl.textContent = awayNote || (running ? '' : (sessionStarted() ? 'Paused' : 'Ready'));
+      startBtn.textContent = running ? 'Pause' : (sessionStarted() ? 'Resume' : 'Start');
+      startBtn.disabled = false;
+      skipBtn.disabled = false;
+      try{ document.title = clock(left) + ' · ' + s.label; }catch(e){}
+    }
+    resetBtn.disabled = !sessionStarted();
+    const tot = totalMs(), el = elapsedMs();
+    elapsedOut.textContent = clock(el);
+    totalOut.textContent = clock(tot);
+    endsOut.textContent = finished ? 'Finished ' + timeOfDay(new Date())
+                                   : 'Ends around ' + timeOfDay(new Date(Date.now() + (tot - el)));
+    paintAccent();
+    updateTape();
+  }
+
+  /* ------------------------------------------------------------------
+     Composer
+  ------------------------------------------------------------------ */
+  function preview(){
+    const mins = parse(input.value);
+    if(!mins.length){
+      readout.className = 'readout warn';
+      readout.textContent = 'Type minutes separated by +, like 25 + 5 + 25 + 15';
+      applyBtn.disabled = true;
+      applyBtn.dataset.dirty = '0';
+      return;
+    }
+    const total = mins.reduce((a,b) => a + b, 0);
+    const same = JSON.stringify(mins) === JSON.stringify(segs.map(s => s.mins));
+    readout.className = 'readout';
+    readout.innerHTML = '<b>' + mins.map(round).join(' → ') + '</b> &nbsp;·&nbsp; ' +
+                        mins.length + ' timers &nbsp;·&nbsp; <b>' + human(total) + '</b> total' +
+                        (same ? '' : ' &nbsp;·&nbsp; not applied yet');
+    applyBtn.disabled = same;
+    applyBtn.dataset.dirty = same ? '0' : '1';
+    // Nothing has run yet? Apply as you type.
+    if(!same && !sessionStarted()) apply();
+  }
+
+  function apply(){
+    const mins = parse(input.value);
+    if(!mins.length) return;
+    stop();
+    segs = build(mins);
+    idx = 0; elapsedInSeg = 0; finished = false;
+    drawTape(); render(); preview(); save(); drawLibrary();
+  }
+
+  /* ------------------------------------------------------------------
+     Running
+
+     The clock is anchored to an absolute timestamp — the epoch time at
+     which the current block began. Nothing counts ticks, so time keeps
+     passing while the tab is closed, the phone is asleep, or the browser
+     is killed. On the way back in we just read the wall clock again.
+  ------------------------------------------------------------------ */
+  function tick(){
+    if(!running) return;
+    elapsedInSeg = Date.now() - anchor;
+    let s = segs[idx], crossed = false;
+    while(s && elapsedInSeg >= s.ms){
+      if(idx === segs.length - 1){
+        elapsedInSeg = s.ms;
+        finished = true; stop();
+        if(!catchingUp) chime('done');
+        render(); save();
+        try{ document.title = 'Session complete'; }catch(e){}
+        return;
+      }
+      anchor += s.ms;            // exact handoff — the block boundary can't drift
+      idx++; s = segs[idx];
+      elapsedInSeg = Date.now() - anchor;
+      crossed = true;
+      if(!catchingUp) chime(s.type === 'focus' ? 'toFocus' : 'toBreak');
+    }
+    if(crossed) save();
+    render();
+  }
+
+  function start(){
+    if(!segs.length) return;
+    if(finished){ idx = 0; elapsedInSeg = 0; finished = false; }
+    running = true;
+    anchor = Date.now() - elapsedInSeg;
+    clearInterval(ticker);
+    ticker = setInterval(tick, 200);
+    primeAudio(); // unlock audio while we still have the user gesture
+    requestWakeLock();
+    render(); save();
+  }
+
+  function stop(){
+    running = false;
+    clearInterval(ticker); ticker = null;
+    releaseWakeLock();
+  }
+
+  function toggle(){
+    awayNote = '';
+    if(running){ stop(); render(); save(); } else { start(); }
+  }
+
+  function reset(){
+    awayNote = '';
+    stop(); idx = 0; elapsedInSeg = 0; finished = false; anchor = Date.now();
+    try{ document.title = 'Pomodoro sequence timer'; }catch(e){}
+    render(); save();
+  }
+
+  function skip(){
+    if(!segs.length || finished) return;
+    awayNote = '';
+    if(idx === segs.length - 1){
+      elapsedInSeg = segs[idx].ms; finished = true; stop(); render(); save(); return;
+    }
+    idx++; elapsedInSeg = 0; anchor = Date.now();
+    render(); save();
+  }
+
+  function jumpTo(i){
+    if(i < 0 || i >= segs.length) return;
+    awayNote = '';
+    idx = i; elapsedInSeg = 0; finished = false; anchor = Date.now();
+    render(); save();
+  }
+
+  /* ------------------------------------------------------------------
+     Screen wake lock (best effort)
+  ------------------------------------------------------------------ */
+  async function requestWakeLock(){
+    try{
+      if('wakeLock' in navigator && !wakeLock)
+        wakeLock = await navigator.wakeLock.request('screen');
+    }catch(e){}
+  }
+  function releaseWakeLock(){
+    try{ if(wakeLock){ wakeLock.release(); wakeLock = null; } }catch(e){}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible'){ if(running) requestWakeLock(); tick(); }
+  });
+
+  /* ------------------------------------------------------------------
+     Persistence
+
+     Everything needed to rebuild the session is written on every state
+     change: the sequence, which block you're on, and the epoch timestamp
+     that block started at. Reopening replays whatever time passed while
+     you were gone. Uses localStorage in a normal browser and falls back
+     to the host storage API when localStorage is unavailable.
+  ------------------------------------------------------------------ */
+  const KEY = 'pomodoro:session', LIB = 'pomodoro:library';
+
+  const store = (function(){
+    let local = false;
+    try{ localStorage.setItem('__probe','1'); localStorage.removeItem('__probe'); local = true; }catch(e){}
+    return {
+      get: async function(k){
+        if(local){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+        try{ const r = await window.storage.get(k, false); return r ? r.value : null; }
+        catch(e){ return null; }
+      },
+      set: function(k, v){
+        if(local){ try{ localStorage.setItem(k, v); }catch(e){} return; }
+        try{ if(window.storage) window.storage.set(k, v, false); }catch(e){}
+      }
+    };
+  })();
+
+  function save(){
+    store.set(KEY, JSON.stringify({
+      seq: input.value,
+      alternate: alternate,
+      sound: soundOn,
+      idx: idx,
+      anchor: anchor,          // absolute — this is what survives a close
+      elapsed: elapsedInSeg,   // only meaningful while paused
+      running: running,
+      finished: finished,
+      at: Date.now()
+    }));
+  }
+
+  let library = [];
+  function saveLibrary(){ store.set(LIB, JSON.stringify(library)); }
+
+  function drawLibrary(){
+    libEl.innerHTML = '';
+    const add = document.createElement('button');
+    add.className = 'addbtn';
+    add.textContent = '+ Save this sequence';
+    add.addEventListener('click', () => {
+      const v = input.value.trim();
+      if(!v || !parse(v).length) return;
+      if(library.indexOf(v) === -1){
+        library.unshift(v);
+        library = library.slice(0, 12);
+        saveLibrary();
+      }
+      drawLibrary();
+    });
+    libEl.appendChild(add);
+
+    library.forEach(seq => {
+      const chip = document.createElement('span');
+      chip.className = 'chip' + (seq === input.value.trim() ? ' active' : '');
+      const load = document.createElement('button');
+      load.className = 'chip-load';
+      load.textContent = seq;
+      load.addEventListener('click', () => { input.value = seq; apply(); });
+      const del = document.createElement('button');
+      del.className = 'chip-del';
+      del.textContent = '×';
+      del.setAttribute('aria-label', 'Remove ' + seq);
+      del.addEventListener('click', () => {
+        library = library.filter(x => x !== seq);
+        saveLibrary(); drawLibrary();
+      });
+      chip.appendChild(load); chip.appendChild(del);
+      libEl.appendChild(chip);
+    });
+  }
+
+  async function load(){
+    // saved sequences
+    try{
+      const raw = await store.get(LIB);
+      const arr = raw ? JSON.parse(raw) : null;
+      if(Array.isArray(arr)) library = arr.filter(x => typeof x === 'string').slice(0, 12);
+    }catch(e){}
+
+    // last session
+    let st = null;
+    try{ const raw = await store.get(KEY); st = raw ? JSON.parse(raw) : null; }catch(e){}
+
+    if(st){
+      if(st.sound === false){
+        soundOn = false;
+        soundBtn.setAttribute('aria-pressed','false');
+        soundBtn.textContent = 'Sound off';
+      }
+      if(st.alternate){
+        alternate = true;
+        modeBtn.setAttribute('aria-pressed','true');
+        modeBtn.textContent = 'Alternating focus and breaks';
+      }
+      if(st.seq) input.value = st.seq;
+    }
+
+    apply();                       // builds the tape from the input
+    drawLibrary();
+    if(!st || !segs.length){ render(); return; }
+
+    idx = Math.min(Math.max(st.idx | 0, 0), segs.length - 1);
+    finished = !!st.finished;
+    const gone = Date.now() - (st.at || Date.now());
+
+    if(st.running && !finished){
+      running = true;
+      anchor = st.anchor || Date.now();
+      catchingUp = true;             // replay silently: no burst of chimes
+      clearInterval(ticker);
+      ticker = setInterval(tick, 200);
+      tick();
+      catchingUp = false;
+      if(running) requestWakeLock();
+      if(gone > 45000){
+        awayNote = finished ? 'Finished while you were away'
+                            : 'Picked up ' + human(gone / 60000) + ' later';
+      }
+    } else {
+      elapsedInSeg = Math.min(st.elapsed || 0, segs[idx].ms);
+      anchor = Date.now() - elapsedInSeg;
+      if(finished) elapsedInSeg = segs[idx].ms;
+    }
+    render();
+  }
+
+  window.addEventListener('pagehide', save);
+  window.addEventListener('beforeunload', save);
+
+  /* ------------------------------------------------------------------
+     Wiring
+  ------------------------------------------------------------------ */
+  input.addEventListener('input', preview);
+  input.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); apply(); input.blur(); } });
+  applyBtn.addEventListener('click', apply);
+  startBtn.addEventListener('click', toggle);
+  skipBtn.addEventListener('click', skip);
+  resetBtn.addEventListener('click', reset);
+
+  document.querySelectorAll('.presets button').forEach(b => {
+    b.addEventListener('click', () => { input.value = b.dataset.seq; apply(); });
+  });
+
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', String(soundOn));
+    soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off';
+    if(soundOn) chime('toFocus');
+    save();
+  });
+
+  modeBtn.addEventListener('click', () => {
+    alternate = !alternate;
+    modeBtn.setAttribute('aria-pressed', String(alternate));
+    modeBtn.textContent = alternate ? 'Alternating focus and breaks' : 'Every block a focus';
+    classify(segs); drawTape(); render();
+  });
+
+  document.addEventListener('keydown', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if(tag === 'input' || tag === 'textarea') return;
+    if(e.key === ' '){ e.preventDefault(); toggle(); }
+    else if(e.key.toLowerCase() === 'r'){ reset(); }
+    else if(e.key.toLowerCase() === 'n'){ skip(); }
+  });
+
+  window.addEventListener('resize', updateTape);
+
+  setInterval(() => { wallclock.textContent = timeOfDay(new Date()); }, 1000);
+  wallclock.textContent = timeOfDay(new Date());
+
+  // Boot — load() applies the sequence itself, so don't apply first:
+  // doing so would overwrite the saved session before it's read.
+  load();
+})();
+</script>
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  }
+</script>
+</body>
+</html>
